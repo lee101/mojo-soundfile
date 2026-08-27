@@ -1,6 +1,5 @@
 """PCM conversion kernels exported through a small C ABI."""
 
-from std.algorithm.functional import parallelize
 from std.math import round
 from std.memory import bitcast
 from std.sys.info import simd_width_of
@@ -101,12 +100,9 @@ def msf_decode_f64(src_addr: Int, dst_addr: Int, n: Int, kind: Int) abi("C"):
     if n >= PARALLEL_THRESHOLD:
         var chunks = (n + GRAIN_SIZE - 1) // GRAIN_SIZE
 
-        @parameter
-        def work(chunk: Int):
+        for chunk in range(chunks):
             var begin = chunk * GRAIN_SIZE
             decode_range(src, dst, begin, min(begin + GRAIN_SIZE, n), kind)
-
-        parallelize[work](chunks, min(chunks, 8))
     else:
         decode_range(src, dst, 0, n, kind)
 
@@ -254,11 +250,8 @@ def msf_encode_f64(src_addr: Int, dst_addr: Int, n: Int, kind: Int) abi("C"):
     if n >= PARALLEL_THRESHOLD:
         var chunks = (n + GRAIN_SIZE - 1) // GRAIN_SIZE
 
-        @parameter
-        def work(chunk: Int):
+        for chunk in range(chunks):
             var begin = chunk * GRAIN_SIZE
             encode_range(src, dst, begin, min(begin + GRAIN_SIZE, n), kind)
-
-        parallelize[work](chunks, min(chunks, 8))
     else:
         encode_range(src, dst, 0, n, kind)
