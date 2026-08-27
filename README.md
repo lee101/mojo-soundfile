@@ -74,26 +74,27 @@ runs and include file I/O, container handling, allocation, and conversion.
 
 | case | mojo-soundfile | soundfile | result |
 |---|---:|---:|---:|
-| WAV PCM_16 read, 1M x 2 | 5.08 ms | 6.02 ms | 1.18x faster |
-| WAV PCM_24 read, 1M x 2 | 8.08 ms | 10.60 ms | 1.31x faster |
-| WAV FLOAT read, 1M x 2 | 4.97 ms | 8.25 ms | 1.66x faster |
-| WAV PCM_16 write, 1M x 2 | 10.49 ms | 20.86 ms | 1.99x faster |
-| WAV PCM_24 write, 1M x 2 | 18.27 ms | 24.47 ms | 1.34x faster |
-| FLAC PCM_24 read, 300k x 2 | 11.75 ms | 11.88 ms | 1.01x faster |
-| FLAC PCM_24 write, 300k x 2 | 22.31 ms | 25.86 ms | 1.16x faster |
+| WAV PCM_16 read, 1M x 2 | 1.99 ms | 2.66 ms | 1.33x faster |
+| WAV PCM_24 read, 1M x 2 | 2.29 ms | 6.18 ms | 2.69x faster |
+| WAV FLOAT read, 1M x 2 | 3.30 ms | 5.14 ms | 1.56x faster |
+| WAV PCM_16 write, 1M x 2 | 7.26 ms | 18.91 ms | 2.60x faster |
+| WAV PCM_24 write, 1M x 2 | 8.88 ms | 24.26 ms | 2.73x faster |
+| FLAC PCM_24 read, 300k x 2 | 10.71 ms | 10.44 ms | 1.03x slower |
+| FLAC PCM_24 write, 300k x 2 | 21.15 ms | 27.20 ms | 1.29x faster |
 
 These are the literal results of the final `pixi run bench` publication run,
-not isolated kernel timings. All measured cases were faster in this run;
-performance will vary by machine and workload.
+not isolated kernel timings. FLAC PCM_24 read was 1.03x slower than upstream
+in this run; performance will vary by machine and workload.
 
 ## How it works
 
 `src/soundfile.mojo` is one compilation unit containing byte-to-sample and
 sample-to-byte kernels for the covered little-endian PCM and IEEE formats.
 The conversion loops use the host's native float64 SIMD width with scalar
-remainder handling. Very large inputs are split into independent chunks
-across a bounded number of CPU workers; smaller inputs stay serial to avoid
-thread-launch overhead.
+remainder handling. PCM_24 decoding expands packed three-byte samples with
+contiguous SIMD loads and byte shuffles. Very large inputs are split into
+independent chunks across a bounded number of CPU workers; smaller inputs stay
+serial to avoid thread-launch overhead.
 
 Python owns all input and output memory. Buffers cross the C ABI as integer
 addresses, and the exported Mojo functions reconstruct

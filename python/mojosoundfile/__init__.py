@@ -72,7 +72,7 @@ def read(
         if end < begin:
             end = begin
         requested = end - begin if frames < 0 else frames
-        if stream.seekable():
+        if begin and stream.seekable():
             stream.seek(begin)
         data = stream.read(
             requested,

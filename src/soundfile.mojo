@@ -1,12 +1,13 @@
 """PCM conversion kernels exported through a small C ABI."""
 
+from max.algorithm import parallelize
 from std.math import round
 from std.memory import bitcast
-from std.sys.info import simd_width_of
+from std.sys.info import simd_width_of as simdwidthof
 
 comptime BPtr = UnsafePointer[UInt8, AnyOrigin[mut=True]]
 comptime DPtr = UnsafePointer[Float64, AnyOrigin[mut=True]]
-comptime W = simd_width_of[DType.float64]()
+comptime W = simdwidthof[DType.float64]()
 comptime PARALLEL_THRESHOLD = 16777216
 comptime GRAIN_SIZE = 262144
 
@@ -41,6 +42,63 @@ def decode_range(src: BPtr, dst: DPtr, begin: Int, end: Int, kind: Int):
                 i,
                 values.load[width=W, alignment=1](i).cast[DType.float64]() / 32768.0,
             )
+            i += W
+    elif kind == 3:
+        while i + 2 * W <= end:
+            var j = i * 3
+            comptime if W == 4:
+                var octets = src.load[width=16](j)
+                var expanded = octets.shuffle[
+                    0, 1, 2, 0, 3, 4, 5, 0, 6, 7, 8, 0, 9, 10, 11, 0
+                ]()
+                var values = bitcast[DType.int32, W](expanded)
+                values = (values << 8) >> 8
+                dst.store(i, values.cast[DType.float64]() / 8388608.0)
+            elif W == 8:
+                var octets = src.load[width=32](j)
+                var expanded = octets.shuffle[
+                    0,
+                    1,
+                    2,
+                    0,
+                    3,
+                    4,
+                    5,
+                    0,
+                    6,
+                    7,
+                    8,
+                    0,
+                    9,
+                    10,
+                    11,
+                    0,
+                    12,
+                    13,
+                    14,
+                    0,
+                    15,
+                    16,
+                    17,
+                    0,
+                    18,
+                    19,
+                    20,
+                    0,
+                    21,
+                    22,
+                    23,
+                    0,
+                ]()
+                var values = bitcast[DType.int32, W](expanded)
+                values = (values << 8) >> 8
+                dst.store(i, values.cast[DType.float64]() / 8388608.0)
+            else:
+                var low = (src + j).strided_load[width=W](3).cast[DType.int32]()
+                var middle = (src + j + 1).strided_load[width=W](3).cast[DType.int32]()
+                var high = (src + j + 2).strided_load[width=W](3).cast[DType.int32]()
+                var values = ((low | (middle << 8) | (high << 16)) << 8) >> 8
+                dst.store(i, values.cast[DType.float64]() / 8388608.0)
             i += W
     elif kind == 4:
         var values = src.bitcast[Int32]()
@@ -100,9 +158,13 @@ def msf_decode_f64(src_addr: Int, dst_addr: Int, n: Int, kind: Int) abi("C"):
     if n >= PARALLEL_THRESHOLD:
         var chunks = (n + GRAIN_SIZE - 1) // GRAIN_SIZE
 
-        for chunk in range(chunks):
+        @parameter
+        @__copy_capture(src, dst, n, kind)
+        def work(chunk: Int):
             var begin = chunk * GRAIN_SIZE
             decode_range(src, dst, begin, min(begin + GRAIN_SIZE, n), kind)
+
+        parallelize[work](chunks, min(chunks, 8))
     else:
         decode_range(src, dst, 0, n, kind)
 
@@ -250,8 +312,12 @@ def msf_encode_f64(src_addr: Int, dst_addr: Int, n: Int, kind: Int) abi("C"):
     if n >= PARALLEL_THRESHOLD:
         var chunks = (n + GRAIN_SIZE - 1) // GRAIN_SIZE
 
-        for chunk in range(chunks):
+        @parameter
+        @__copy_capture(src, dst, n, kind)
+        def work(chunk: Int):
             var begin = chunk * GRAIN_SIZE
             encode_range(src, dst, begin, min(begin + GRAIN_SIZE, n), kind)
+
+        parallelize[work](chunks, min(chunks, 8))
     else:
         encode_range(src, dst, 0, n, kind)

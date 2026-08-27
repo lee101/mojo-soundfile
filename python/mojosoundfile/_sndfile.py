@@ -77,7 +77,7 @@ def _load() -> ctypes.CDLL:
     dll.sf_seek.argtypes = [ptr, ctypes.c_int64, ctypes.c_int]
     dll.sf_seek.restype = ctypes.c_int64
     dll.sf_write_sync.argtypes = [ptr]
-    for suffix, ctype in (
+    for suffix, _ctype in (
         ("double", ctypes.c_double),
         ("float", ctypes.c_float),
         ("int", ctypes.c_int32),
@@ -85,7 +85,7 @@ def _load() -> ctypes.CDLL:
     ):
         for op in ("readf", "writef"):
             fn = getattr(dll, f"sf_{op}_{suffix}")
-            fn.argtypes = [ptr, ctypes.POINTER(ctype), ctypes.c_int64]
+            fn.argtypes = [ptr, ctypes.c_void_p, ctypes.c_int64]
             fn.restype = ctypes.c_int64
     dll.sf_get_string.argtypes = [ptr, ctypes.c_int]
     dll.sf_get_string.restype = ctypes.c_char_p
@@ -426,9 +426,8 @@ class SoundFile:
             shape = (requested, self.channels) if always_2d or self.channels > 1 else (requested,)
             arr = np.empty(shape, dtype=_DTYPES[dtype][0])
         flat = arr.reshape(-1)
-        ctype = np.ctypeslib.as_ctypes_type(arr.dtype)
         fn = getattr(_LIB, f"sf_readf_{_DTYPES[dtype][1]}")
-        got = int(fn(self._file, flat.ctypes.data_as(ctypes.POINTER(ctype)), requested))
+        got = int(fn(self._file, flat.ctypes.data, requested))
         if got < 0:
             raise _error(self._file, "Error reading: ")
         if got < requested and fill_value is not None:
@@ -456,9 +455,8 @@ class SoundFile:
             )
         arr = np.ascontiguousarray(arr, dtype=_DTYPES[arr.dtype.name][0])
         frames = arr.shape[0]
-        ctype = np.ctypeslib.as_ctypes_type(arr.dtype)
         fn = getattr(_LIB, f"sf_writef_{_DTYPES[arr.dtype.name][1]}")
-        wrote = int(fn(self._file, arr.ctypes.data_as(ctypes.POINTER(ctype)), frames))
+        wrote = int(fn(self._file, arr.ctypes.data, frames))
         if wrote != frames:
             raise _error(self._file, "Error writing: ")
         self._write_position += wrote

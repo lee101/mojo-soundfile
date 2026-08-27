@@ -71,7 +71,7 @@ def test_pcm_clipping_and_nonfinite_parity(tmp_path, subtype):
     assert np.array_equal(msf.read(ours)[0], sf.read(theirs)[0])
 
 
-@pytest.mark.parametrize("frames", [1, 3, 5, 7])
+@pytest.mark.parametrize("frames", [1, 3, 5, 7, 9, 11])
 @pytest.mark.parametrize("subtype", ["PCM_16", "PCM_24", "FLOAT"])
 def test_mojo_simd_tail_matches_upstream(tmp_path, frames, subtype):
     data = signal(frames)
