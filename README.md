@@ -92,9 +92,13 @@ in this run; performance will vary by machine and workload.
 sample-to-byte kernels for the covered little-endian PCM and IEEE formats.
 The conversion loops use the host's native float64 SIMD width with scalar
 remainder handling. PCM_24 decoding expands packed three-byte samples with
-contiguous SIMD loads and byte shuffles. Very large inputs are split into
-independent chunks across a bounded number of CPU workers; smaller inputs stay
-serial to avoid thread-launch overhead.
+contiguous SIMD loads and byte shuffles. Conversion is single-threaded. Mojo 1.2
+removed closure capture, so the 1.1.0 grain-chunked fan-out is no longer
+expressible inside a `parallelize` body, and these are the most memory-bound
+kernels in the port: PCM_24 and PCM_32 move three or four bytes in and eight
+bytes out per sample for at most a handful of arithmetic operations, and DOUBLE
+is a pure reinterpret. Threading them can only lose bandwidth, so the chunk
+loop and its 16.7M-sample threshold were removed rather than serialised.
 
 Python owns all input and output memory. Buffers cross the C ABI as integer
 addresses, and the exported Mojo functions reconstruct

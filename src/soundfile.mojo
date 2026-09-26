@@ -1,6 +1,5 @@
 """PCM conversion kernels exported through a small C ABI."""
 
-from max.algorithm import parallelize
 from std.math import round
 from std.memory import bitcast
 from std.sys.info import simd_width_of as simdwidthof
@@ -8,8 +7,6 @@ from std.sys.info import simd_width_of as simdwidthof
 comptime BPtr = UnsafePointer[UInt8, AnyOrigin[mut=True]]
 comptime DPtr = UnsafePointer[Float64, AnyOrigin[mut=True]]
 comptime W = simdwidthof[DType.float64]()
-comptime PARALLEL_THRESHOLD = 16777216
-comptime GRAIN_SIZE = 262144
 
 
 def clamp_sample(x: Float64) -> Float64:
@@ -155,18 +152,7 @@ def msf_decode_f64(src_addr: Int, dst_addr: Int, n: Int, kind: Int) abi("C"):
         return
     var src = BPtr(unsafe_from_address=src_addr)
     var dst = DPtr(unsafe_from_address=dst_addr)
-    if n >= PARALLEL_THRESHOLD:
-        var chunks = (n + GRAIN_SIZE - 1) // GRAIN_SIZE
-
-        @parameter
-        @__copy_capture(src, dst, n, kind)
-        def work(chunk: Int):
-            var begin = chunk * GRAIN_SIZE
-            decode_range(src, dst, begin, min(begin + GRAIN_SIZE, n), kind)
-
-        parallelize[work](chunks, min(chunks, 8))
-    else:
-        decode_range(src, dst, 0, n, kind)
+    decode_range(src, dst, 0, n, kind)
 
 
 def encode_range(src: DPtr, dst: BPtr, begin: Int, end: Int, kind: Int):
@@ -309,15 +295,4 @@ def msf_encode_f64(src_addr: Int, dst_addr: Int, n: Int, kind: Int) abi("C"):
         return
     var src = DPtr(unsafe_from_address=src_addr)
     var dst = BPtr(unsafe_from_address=dst_addr)
-    if n >= PARALLEL_THRESHOLD:
-        var chunks = (n + GRAIN_SIZE - 1) // GRAIN_SIZE
-
-        @parameter
-        @__copy_capture(src, dst, n, kind)
-        def work(chunk: Int):
-            var begin = chunk * GRAIN_SIZE
-            encode_range(src, dst, begin, min(begin + GRAIN_SIZE, n), kind)
-
-        parallelize[work](chunks, min(chunks, 8))
-    else:
-        encode_range(src, dst, 0, n, kind)
+    encode_range(src, dst, 0, n, kind)
